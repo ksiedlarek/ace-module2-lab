@@ -7,6 +7,7 @@ import { type Request, type Response, type NextFunction } from 'express'
 import { AllHtmlEntities as Entities } from 'html-entities'
 import config from 'config'
 import fs from 'node:fs/promises'
+import vm from 'node:vm'
 
 import * as challengeUtils from '../lib/challengeUtils'
 import { themes } from '../views/themes/themes'
@@ -19,6 +20,23 @@ const entities = new Entities()
 
 function favicon () {
   return utils.extractFilename(config.get('application.favicon'))
+}
+
+function safeEval (code: string): any {
+  const normalized = code.toLowerCase().replace(/\s+/g, '')
+  const forbidden = [
+    'require', 'process', 'exec', 'spawn', 'child_process', 'eval', 'function',
+    'import', 'fs', 'os', 'path', 'global', 'window', 'document', 'this',
+    'constructor', 'proto', 'prototype', 'setTimeout', 'setInterval',
+    'object', 'reflect', 'proxy', 'module', 'mainmodule'
+  ]
+  for (const word of forbidden) {
+    if (normalized.includes(word)) {
+      throw new Error('Forbidden keyword detected')
+    }
+  }
+
+  return vm.runInNewContext(code, Object.create(null), { timeout: 100 })
 }
 
 export function getUserProfile () {
@@ -58,7 +76,7 @@ export function getUserProfile () {
         if (!code) {
           throw new Error('Username is null')
         }
-        username = eval(code) // eslint-disable-line no-eval
+        username = safeEval(code)
       } catch (err) {
         username = '\\' + username
       }
